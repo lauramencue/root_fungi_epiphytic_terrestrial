@@ -37,6 +37,8 @@ library(tidyverse)
 
 # Define file paths to the raw data and primers --------------------------------
 
+load("scripts_analyses/DADA2.Rdata")
+
 # Set path to raw sequencing data
 path <- "input_data/rawdata"
 list.files(path)  # Verify files are present
