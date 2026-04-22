@@ -32,18 +32,14 @@ family_cols <- c(
   "Piperaceae" = "#FFC61E"
 )
 
-# Shape palette for habitat (shapes that support fill)
-# Triangle (24) for epiphytes, circle (21) for terrestrial
+# Shape palette for habitat
 form_shapes <- c("Epiphytic" = 24, "Terrestrial" = 21)
 
-# Position dodge for non-overlapping error bars
-pd <- position_dodge(width = 0.35)
-
-# Recode habitat labels for clarity
-# E → Epiphytes, T → Terrestrial
+# Recode habitat labels
 alpha_df <- alpha_df %>%
-  mutate(host_substrate = dplyr::recode(host_substrate,
-                               "E" = "Epiphytic", "T" = "Terrestrial")) 
+  mutate(host_substrate = recode(host_substrate,
+                                 "E" = "Epiphytic",
+                                 "T" = "Terrestrial"))
 
 # TOP PANEL: Overall habitat comparison ------------------------------------
 
@@ -52,128 +48,180 @@ p_top <- ggplot(
   aes(x = ASV_richness, y = host_substrate)) +
   # Individual points with jitter to avoid overplotting
   geom_jitter(aes(shape = host_substrate),
-    height = 0.08,
-    size = 1.8,
-    alpha = 0.5,
-    fill = "black",
-    color = "black") +
+              height = 0.08,
+              size = 1.8,
+              alpha = 0.5,
+              fill = "black",
+              color = "black") +
   # Boxplot showing median and quartiles
   geom_boxplot(width = 0.3,
-    outlier.shape = NA,  # Don't show outliers (already shown as points)
-    alpha = 0) +
+               outlier.shape = NA,  # Don't show outliers (already shown as points)
+               alpha = 0) +
   # Position x-axis on top for visual alignment with bottom panel
-  scale_x_continuous(position = "top") +
+  scale_x_continuous(position = "top", labels = scales::comma) +
   scale_shape_manual(values = form_shapes) +
   theme_classic() +
   labs(x = NULL, y = NULL) +
   theme(legend.position = "none",
-    axis.text = element_text(size = 13),
-    axis.title = element_text(size = 15),
-    plot.margin = margin(5.5, 5.5, 0, 5.5)  # Remove bottom margin
+        axis.text = element_text(size = 13),
+        axis.title = element_text(size = 15),
+        plot.margin = margin(5.5, 5.5, 0, 5.5)  # Remove bottom margin
   )
 
 p_top
 
+
+
+
 # BOTTOM PANEL: Detailed species-level view ------------------------------------
 
-# Order species within families by mean richness
-alpha_roots_ordered <- alpha_df %>%
-  mutate(host_family = factor(host_family,
-      levels = c("Araceae", "Bromeliaceae", "Orchidaceae", "Piperaceae"))) %>%
+# Label formatter for italic species names ----------------------------------------
+
+format_sci_label <- function(x) {
+  x <- gsub("_", " ", x)
+  
+  sapply(x, function(z) {
+    if (z == "Overall mean per habitat") return(z)
+    
+    parts <- strsplit(z, " +")[[1]]
+    
+    if (length(parts) >= 2) {
+      if (grepl("^sp", parts[2])) {
+        return(paste0("<i>", parts[1], "</i> ", paste(parts[-1], collapse = " ")))
+      } else {
+        return(paste0("<i>", parts[1], " ", parts[2], "</i>"))
+      }
+    }
+    
+    paste0("<i>", parts[1], "</i>")
+  }, USE.NAMES = FALSE)
+}
+
+# Build manual Y axis ----------------------------------------------------------
+
+family_levels <- c("Araceae", "Bromeliaceae", "Orchidaceae", "Piperaceae")
+
+species_order <- alpha_df %>%
+  mutate(host_family = factor(host_family, levels = family_levels)) %>%
   group_by(host_family, host_species_identity) %>%
-  mutate(mean_richness = mean(ASV_richness)) %>%
-  ungroup() %>%
-  mutate(
-    # Order species by family and mean richness
-    host_species_ord = fct_reorder2(host_species_identity, host_family, mean_richness),
-    # Add dummy level for summary statistics (will appear at bottom after coord_flip)
-    host_species_ord = fct_expand(host_species_ord, "Overall mean per habitat"),
-    host_species_ord = fct_relevel(host_species_ord, "Overall mean per habitat", after = 0))
+  summarise(mean_val = mean(ASV_richness), .groups = "drop") %>%
+  arrange(host_family, mean_val)
 
-# Calculate growth form means ± SD per family (for summary row)
-gf_summary <- alpha_roots_ordered %>%
+gap <- 1.2
+current_y <- 0
+y_map_list <- list()
+
+for (fam in family_levels) {
+  spp <- species_order %>% filter(host_family == fam) %>% pull(host_species_identity)
+  
+  rows <- c("Overall mean per habitat", spp)
+  n <- length(rows)
+  
+  y_vals <- seq(current_y + n - 1, current_y, by = -1)
+  
+  y_map_list[[fam]] <- tibble(
+    host_family = fam,
+    row_id = rows,
+    y = y_vals
+  )
+  
+  current_y <- current_y + n + gap
+}
+
+y_map <- bind_rows(y_map_list)
+
+# Merge data -------------------------------------------------------------------
+
+alpha_plot <- alpha_df %>%
+  left_join(y_map %>% filter(row_id != "Overall mean per habitat"),
+            by = c("host_family", "host_species_identity" = "row_id"))
+
+# Growth form summary with manual dodge offset
+dodge_offset <- 0.18
+
+gf_summary <- alpha_df %>%
   group_by(host_family, host_substrate) %>%
-  summarise(
-    mean_gf = mean(ASV_richness, na.rm = TRUE),
-    sd_gf = sd(ASV_richness, na.rm = TRUE),
-    .groups = "drop") %>%
-  mutate(host_species_ord = factor("Overall mean per habitat",
-      levels = levels(alpha_roots_ordered$host_species_ord)))
+  summarise(mean = mean(ASV_richness), sd = sd(ASV_richness), .groups = "drop") %>%
+  left_join(y_map %>% filter(row_id == "Overall mean per habitat"),
+            by = "host_family") %>%
+  mutate(y_dodged = ifelse(host_substrate == "Epiphytic", y + dodge_offset, y - dodge_offset))
 
-# Calculate family mean across both growth forms (for reference line)
-family_mean <- alpha_roots_ordered %>%
+# Family mean with y range for scoped dashed segments
+x_range <- alpha_df %>%
+  group_by(host_family) %>%
+  summarise(xmin = min(ASV_richness, na.rm = TRUE),
+            xmax = max(ASV_richness, na.rm = TRUE),
+            .groups = "drop")
+
+family_mean <- alpha_df %>%
   group_by(host_family) %>%
   summarise(mean_family = mean(ASV_richness, na.rm = TRUE), .groups = "drop") %>%
-  mutate(host_species_ord = factor("Overall mean per habitat",
-      levels = levels(alpha_roots_ordered$host_species_ord)))
+  left_join(y_map %>% filter(row_id == "Overall mean per habitat"), by = "host_family") %>%
+  left_join(x_range, by = "host_family") %>%
+  left_join(
+    y_map %>% group_by(host_family) %>%
+      summarise(ymin = min(y), ymax = max(y), .groups = "drop"),
+    by = "host_family"
+  )
 
-# Create bottom panel
-p_bottom <- ggplot(
-  alpha_roots_ordered,
-  aes(x = host_species_ord, y = ASV_richness, fill = host_family)) +
-  # Family mean as dashed horizontal reference line
-  geom_hline(
-    data = family_mean,
-    aes(yintercept = mean_family),
-    inherit.aes = FALSE,
-    linetype = "dashed",
-    linewidth = 0.9,
-    color = "black") +
-  # Connect samples within species to show variation
+# Axis labels
+y_labels <- format_sci_label(y_map$row_id)
+
+# BOTTOM PANEL -----------------------------------------------------------------
+
+p_bottom <- ggplot(alpha_plot, aes(x = ASV_richness, y = y)) +
+  
+  # Dashed family mean — scoped per family
+  geom_segment(data = family_mean,
+               aes(x = mean_family, xend = mean_family,
+                   y = ymin, yend = ymax),
+               inherit.aes = FALSE,
+               linetype = "dashed", linewidth = 0.9, color = "black") +
+  
+  # Lines connecting samples within species
   geom_line(aes(group = host_species_identity, color = host_family),
-    linewidth = 0.9) +
-  # Individual sample points (shape indicates growth form)
+            linewidth = 0.9) +
+  
+  # Individual points
   geom_point(aes(shape = host_substrate),
-    size = 3,
-    alpha = 0.7,
-    fill = "black",
-    color = "black",
-    stroke = 0.3) +
-  # Growth form summary: error bars (mean ± SD)
-  geom_errorbar(data = gf_summary,
-    aes(x = host_species_ord,
-      ymin = mean_gf - sd_gf,
-      ymax = mean_gf + sd_gf,
-      group = host_substrate),
-    inherit.aes = FALSE,
-    width = 0.12,
-    linewidth = 0.6,
-    color = "black",
-    position = pd) +
-  # Growth form summary: mean points
+             size = 3, alpha = 0.7,
+             fill = "black", color = "black", stroke = 0.3) +
+  
+  # Error bars for growth form summary
+  geom_segment(data = gf_summary,
+               aes(x = mean - sd, xend = mean + sd,
+                   y = y_dodged, yend = y_dodged),
+               inherit.aes = FALSE,
+               linewidth = 0.6, color = "black") +
+  
+  # Summary mean points
   geom_point(data = gf_summary,
-    aes(x = host_species_ord,
-      y = mean_gf,
-      shape = host_substrate,
-      fill = host_family,
-      group = host_substrate),
-    inherit.aes = FALSE,
-    size = 4,
-    color = "black",
-    stroke = 0.8,
-    position = pd) +
-  # Aesthetics
+             aes(x = mean, y = y_dodged,
+                 shape = host_substrate,
+                 fill = host_family),
+             inherit.aes = FALSE,
+             size = 4, color = "black", stroke = 0.8) +
+  
   scale_shape_manual(name = "Host rooting substrate", values = form_shapes) +
   scale_fill_manual(name = "Host family", values = family_cols) +
   scale_color_manual(name = "Host family", values = family_cols) +
-  coord_flip() +
+  scale_y_continuous(
+    breaks = y_map$y,
+    labels = y_labels
+  ) +
+  
   theme_classic() +
-  labs(y = "ASV richness (α-diversity) Hill q = 0", x = NULL) +
-  facet_wrap(~host_family, ncol = 1, scales = "free_y") +
+  labs(x = "ASV richness (α-diversity) Hill q = 0", y = NULL) +
   theme(
-    # Facet styling
-    strip.background = element_blank(),
-    strip.text = element_blank(),  # This removes the family name labels
-    # Text sizes
-    text = element_text(size = 14),
+    axis.text.y = ggtext::element_markdown(size = 13),
+    axis.text.x = element_text(size = 13),
     axis.title.x = element_text(size = 15),
-    axis.text = element_text(size = 13),
-    plot.title = element_text(size = 14, face = "bold"),
-    # Hide legend (visual elements are self-explanatory with facets)
-    legend.position = "none")
-
+    legend.position = "none"
+  ) +
+  scale_x_continuous(labels = scales::label_comma())
 
 p_bottom
+
 
 # Combine panels ---------------------------------------------------------------
 
@@ -196,4 +244,3 @@ ggsave(
   units = "in",
   bg = "white"
 )
-

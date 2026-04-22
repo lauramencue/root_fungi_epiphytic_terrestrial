@@ -53,6 +53,8 @@ REV <- "TCCTCCGCTTATTGATATGC"   # ITS4R (White et al., 1990)
 
 # Create primer orientation sequences -----------------------------------------
 
+set.seed(123)
+
 # Function to generate all possible orientations of a primer sequence
 # Needed because primers can appear in any orientation in ITS amplicons
 allOrients <- function(primer) {
@@ -149,7 +151,7 @@ rbind(
 # Get cutadapt-processed files
 cutFs <- sort(list.files(path.cut, pattern = "_1.fq.gz", full.names = TRUE))
 cutRs <- sort(list.files(path.cut, pattern = "_2.fq.gz", full.names = TRUE))
-
+getwd()
 # Read sample name mapping file
 sample_map <- read.table(
   "input_data/sampleName_clientId.txt", 
@@ -277,6 +279,8 @@ colnames(track) <- c(
 rownames(track) <- sample.names
 head(track)
 
+write.csv()
+
 # OPTIONAL Post-processing filters ------------------------------------------------------
 
 # we inspect the final data set by implementing different filters 
@@ -286,11 +290,11 @@ seqtab0 <- seqtab.nochim
 
 # Prevalence filter (remove singletons)
 # Remove ASVs present in only 1 sample (likely sequencing noise)
-prev <- colSums(seqtab_len > 0)
-seqtab_prev <- seqtab_len[, prev >= 2, drop = FALSE]
+prev <- colSums(seqtab0 > 0)
+seqtab_prev <- seqtab0[, prev >= 2, drop = FALSE]
 
 
-c(n_ASVs_before = ncol(seqtab_len), n_ASVs_after = ncol(seqtab_prev))
+c(n_ASVs_before = ncol(seqtab0), n_ASVs_after = ncol(seqtab_prev))
 
 # Abundance filter (remove extremely rare ASVs)
 # Remove ASVs with fewer than 5 or 100 total reads across all samples
