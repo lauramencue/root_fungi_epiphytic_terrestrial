@@ -2,6 +2,9 @@
 # Author: Laura Méndez
 # Date: 15.12.26
 
+# test
+#test2
+
 # Goals:
 # This script processes raw ITS2 amplicon sequencing data using the DADA2 pipeline
 # following the ITS-specific workflow. The pipeline includes:
