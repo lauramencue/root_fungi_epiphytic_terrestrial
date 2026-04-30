@@ -58,8 +58,11 @@ p_top <- ggplot(
                outlier.shape = NA,  # Don't show outliers (already shown as points)
                alpha = 0) +
   # Position x-axis on top for visual alignment with bottom panel
-  scale_x_continuous(position = "top", labels = scales::comma) +
-  scale_shape_manual(values = form_shapes) +
+  scale_x_continuous(
+    position = "top",
+    labels   = scales::comma,
+    breaks   = function(x) sort(unique(c(0, pretty(x)))),
+    limits   = function(x) c(0, x[2])) +
   theme_classic() +
   labs(x = NULL, y = NULL) +
   theme(legend.position = "none",
@@ -81,18 +84,19 @@ format_sci_label <- function(x) {
   x <- gsub("_", " ", x)
   
   sapply(x, function(z) {
-    if (z == "Overall mean per habitat") return(z)
+    if (z == "Family mean per rooting substrate") return(z)
     
     parts <- strsplit(z, " +")[[1]]
     
     if (length(parts) >= 2) {
-      if (grepl("^sp", parts[2])) {
-        return(paste0("<i>", parts[1], "</i> ", paste(parts[-1], collapse = " ")))
+      if (grepl("^sp\\.?$", parts[2])) {
+        rest    <- parts[-1]
+        rest[1] <- "sp."
+        return(paste0("<i>", parts[1], " ", paste(rest, collapse = " "), "</i>"))  # whole name italicised
       } else {
         return(paste0("<i>", parts[1], " ", parts[2], "</i>"))
       }
     }
-    
     paste0("<i>", parts[1], "</i>")
   }, USE.NAMES = FALSE)
 }
@@ -114,7 +118,7 @@ y_map_list <- list()
 for (fam in family_levels) {
   spp <- species_order %>% filter(host_family == fam) %>% pull(host_species_identity)
   
-  rows <- c("Overall mean per habitat", spp)
+  rows <- c("Family mean per rooting substrate", spp)  
   n <- length(rows)
   
   y_vals <- seq(current_y + n - 1, current_y, by = -1)
@@ -133,7 +137,7 @@ y_map <- bind_rows(y_map_list)
 # Merge data -------------------------------------------------------------------
 
 alpha_plot <- alpha_df %>%
-  left_join(y_map %>% filter(row_id != "Overall mean per habitat"),
+  left_join(y_map %>% filter(row_id != "Family mean per rooting substrate"),
             by = c("host_family", "host_species_identity" = "row_id"))
 
 # Growth form summary with manual dodge offset
@@ -142,7 +146,7 @@ dodge_offset <- 0.18
 gf_summary <- alpha_df %>%
   group_by(host_family, host_substrate) %>%
   summarise(mean = mean(ASV_richness), sd = sd(ASV_richness), .groups = "drop") %>%
-  left_join(y_map %>% filter(row_id == "Overall mean per habitat"),
+  left_join(y_map %>% filter(row_id == "Family mean per rooting substrate"),
             by = "host_family") %>%
   mutate(y_dodged = ifelse(host_substrate == "Epiphytic", y + dodge_offset, y - dodge_offset))
 
@@ -156,7 +160,7 @@ x_range <- alpha_df %>%
 family_mean <- alpha_df %>%
   group_by(host_family) %>%
   summarise(mean_family = mean(ASV_richness, na.rm = TRUE), .groups = "drop") %>%
-  left_join(y_map %>% filter(row_id == "Overall mean per habitat"), by = "host_family") %>%
+  left_join(y_map %>% filter(row_id == "Family mean per rooting substrate"), by = "host_family") %>%
   left_join(x_range, by = "host_family") %>%
   left_join(
     y_map %>% group_by(host_family) %>%
@@ -205,20 +209,20 @@ p_bottom <- ggplot(alpha_plot, aes(x = ASV_richness, y = y)) +
   scale_shape_manual(name = "Host rooting substrate", values = form_shapes) +
   scale_fill_manual(name = "Host family", values = family_cols) +
   scale_color_manual(name = "Host family", values = family_cols) +
+  scale_x_continuous(
+    labels = scales::label_comma(),
+    breaks = function(x) sort(unique(c(0, pretty(x)))),
+    limits = function(x) c(0, x[2])) +
   scale_y_continuous(
     breaks = y_map$y,
-    labels = y_labels
-  ) +
-  
+    labels = y_labels) +
   theme_classic() +
   labs(x = "ASV richness (α-diversity) Hill q = 0", y = NULL) +
   theme(
     axis.text.y = ggtext::element_markdown(size = 13),
     axis.text.x = element_text(size = 13),
     axis.title.x = element_text(size = 15),
-    legend.position = "none"
-  ) +
-  scale_x_continuous(labels = scales::label_comma())
+    legend.position = "none") 
 
 p_bottom
 
