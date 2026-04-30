@@ -28,8 +28,8 @@ library(VennDiagram)
 
 # Load data --------------------------------------------------------------------
 
-load("analyses.Rdata")
-
+load("analyses3.Rdata")
+load("beta_diversity_results3.Rdata")
 
 fungi <- analyses$fungi
 
@@ -45,7 +45,7 @@ comm <- fungi %>%
   group_by(SampleID, ASV) %>%                  # just in case there are duplicates
   summarise(Reads = sum(Reads), .groups = "drop") %>%
   pivot_wider(names_from = ASV, values_from = Reads, values_fill = 0)
-
+str(comm)
 # Set rownames and keep numeric matrix
 comm_mat <- comm %>%
   as.data.frame()

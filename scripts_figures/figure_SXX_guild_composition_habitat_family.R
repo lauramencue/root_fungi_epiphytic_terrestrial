@@ -23,12 +23,29 @@ load("analyses.Rdata")
 
 fungi <- analyses$fungi
 asv_tax_fungi <- analyses$asv_tax_fungi
+unique(fungi$FunctionalGuilds)
 
 ## Font size across panels
 
 base_axis_size   <- 15
 base_legend_size <- 15
 base_title_size  <- 15
+
+
+broad_symbionts<- rev(c("dark_septate_endophytes",
+                        "other_root_endophytes",
+                        "arbuscular_mycorrhizal",
+                        "other_mycorrhizal_types"))
+
+pal_fg <- c("wood_litter_soil_saprotroph" = "#8DD3C7",
+            "plant_pathogen" = "#FFFFB3",
+            "foliar_endophyte" = "#BEBADA",
+            "animal-associated" = "#80B1D3",
+            "other" = "#FCCDE5",
+            "dark_septate_endophytes" = "#FB8072",
+            "other_root_endophytes" = "#B3DE69",
+            "other_mycorrhizal_types" = "#FDB462",
+            "arbuscular_mycorrhizal" = "#BC80BD")
 
 ## Prepare plotting data -------------------------------------------------------
 guild_prop_fam_hab <- fungi %>%
