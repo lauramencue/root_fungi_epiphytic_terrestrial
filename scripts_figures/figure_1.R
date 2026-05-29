@@ -63,10 +63,11 @@ p_top <- ggplot(
     labels   = scales::comma,
     breaks   = function(x) sort(unique(c(0, pretty(x)))),
     limits   = function(x) c(0, x[2])) +
+  scale_shape_manual(name = "Host rooting substrate", values = form_shapes) +
   theme_classic() +
   labs(x = NULL, y = NULL) +
   theme(legend.position = "none",
-        axis.text = element_text(size = 13),
+        axis.text = element_text(size = 15),
         axis.title = element_text(size = 15),
         plot.margin = margin(5.5, 5.5, 0, 5.5)  # Remove bottom margin
   )
@@ -103,13 +104,18 @@ format_sci_label <- function(x) {
 
 # Build manual Y axis ----------------------------------------------------------
 
-family_levels <- c("Araceae", "Bromeliaceae", "Orchidaceae", "Piperaceae")
+family_levels <- alpha_df %>%
+  group_by(host_family) %>%
+  summarise(fam_mean = mean(ASV_richness, na.rm = TRUE), .groups = "drop") %>%
+  arrange(fam_mean) %>%          # ascending = lowest mean first (bottom of plot)
+  pull(host_family)
 
 species_order <- alpha_df %>%
   mutate(host_family = factor(host_family, levels = family_levels)) %>%
   group_by(host_family, host_species_identity) %>%
   summarise(mean_val = mean(ASV_richness), .groups = "drop") %>%
-  arrange(host_family, mean_val)
+  arrange(host_family, desc(mean_val))
+
 
 gap <- 1.2
 current_y <- 0
@@ -217,12 +223,12 @@ p_bottom <- ggplot(alpha_plot, aes(x = ASV_richness, y = y)) +
     breaks = y_map$y,
     labels = y_labels) +
   theme_classic() +
-  labs(x = "ASV richness (α-diversity) Hill q = 0", y = NULL) +
+  labs(x = " α-diversity (ASV richness; q = 0)", y = NULL) +
   theme(
-    axis.text.y = ggtext::element_markdown(size = 13),
-    axis.text.x = element_text(size = 13),
-    axis.title.x = element_text(size = 15),
-    legend.position = "none") 
+    axis.text.y  = ggtext::element_markdown(size = 15),
+    axis.text.x  = element_text(size = 15),
+    axis.title.x = element_text(size = 15, margin = margin(t = 10)),  
+    legend.position = "none")
 
 p_bottom
 
@@ -232,7 +238,7 @@ p_bottom
 # Stack top and bottom panels with 80:300 height ratio
 # Top panel shows overall pattern, bottom shows detailed species view
 p_combined <- p_top / p_bottom +
-  plot_layout(heights = c(0.8, 3))
+  plot_layout(heights = c(0.4, 3))
 
 # Display combined figure
 p_combined
@@ -243,8 +249,7 @@ ggsave(
   filename = "../Figures/Figure2.alpha_diversity_combined.png",
   plot = p_combined,
   width = 10,
-  height = 15,
+  height = 13,
   dpi = 600,
   units = "in",
-  bg = "white"
-)
+  bg = "white")
